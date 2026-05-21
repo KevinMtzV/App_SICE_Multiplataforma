@@ -45,13 +45,17 @@ android {
 }
 
 dependencies {
-    // GSON
+    implementation(project(":shared"))
+    
+    // Ktor
+    implementation(libs.ktor.client.okhttp)
+
+    // GSON (puedes mantenerlo si otros componentes lo usan, pero prefereimos kotlinx-serialization)
     implementation("com.google.code.gson:gson:2.10.1")
 
     // --- JETPACK COMPOSE BOM ---
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
+    implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")

@@ -34,23 +34,7 @@ class SiceContentProvider : ContentProvider() {
         selectionArgs: Array<out String>?,
         sortOrder: String?
     ): Cursor? {
-        val context = context ?: return null
-
-        val db = SicenetDatabase.getDatabase(context)
-        val dao = db.sicenetDao()
-
-
-        val cursor: Cursor = when (uriMatcher.match(uri)) {
-            KARDEX -> dao.getKardexCursor()
-            CARGA_ACADEMICA -> dao.getCargaCursor()
-            PARCIALES -> dao.getParcialesCursor()
-            FINALES -> dao.getFinalesCursor()
-            else -> throw IllegalArgumentException("URI desconocida: $uri")
-        }
-
-        // Notifica a los observadores si hay cambios en los datos
-        cursor.setNotificationUri(context.contentResolver, uri)
-        return cursor
+        return null // Deshabilitado temporalmente debido a la migración a Multiplatform
     }
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? {

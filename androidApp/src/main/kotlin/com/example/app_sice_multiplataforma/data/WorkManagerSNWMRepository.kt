@@ -27,14 +27,14 @@ class WorkManagerSNWMRepository(ctx: Context) : SNWMRepository {
             "KEY_PASSWORD" to p
         )
 
-        // 1. Primer Worker: Descarga (Etiquetado para monitoreo)
+        // 1. Primer Worker: Descarga
         val loginRequest = OneTimeWorkRequestBuilder<LoginWorker>()
             .setInputData(dataIn)
-            .addTag("EsteQuieroMonitorear") // <--- El tag que pide el maestro
             .build()
 
-        // 2. Segundo Worker: Guarda en DB
+        // 2. Segundo Worker: Guarda en DB (Etiquetado para monitoreo)
         val saveDbRequest = OneTimeWorkRequestBuilder<LoginDBWorker>()
+            .addTag("EsteQuieroMonitorear") // <--- El tag que pide el maestro, ahora al final de la cadena
             .build()
 
         // ENCADENAMIENTO (Punto 2 de la rúbrica)

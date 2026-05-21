@@ -6,8 +6,9 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.app_sice_multiplataforma.MarsPhotosApplication
-import com.google.gson.Gson
 import kotlinx.coroutines.delay
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class LoginWorker(ctx: Context, params: WorkerParameters)
     : CoroutineWorker(ctx, params) {
@@ -15,48 +16,52 @@ class LoginWorker(ctx: Context, params: WorkerParameters)
     private val container = (ctx.applicationContext as MarsPhotosApplication).container
 
     override suspend fun doWork(): Result {
-        val matricula = inputData.getString("KEY_MATRICULA") ?: ""
+        val matricula = inputData.getString("KEY_MATRICULA")?.uppercase() ?: ""
         val password = inputData.getString("KEY_PASSWORD") ?: ""
         val tipoUsuario = "ALUMNO"
 
         var currentAttempt = 0
-        val maxAttempts = 3 // Intentaremos 3 veces si hay error de red
+        val maxAttempts = 3
 
         while (currentAttempt < maxAttempts) {
             try {
-                // 1. Intentar Acceso
+                Log.d("LoginWorker", "Intento $currentAttempt de login para $matricula")
                 val loginResponse = container.snRepository.acceso(matricula, password, tipoUsuario)
-                Log.d("SICENET_DEBUG", "Intento ${currentAttempt + 1} - Respuesta Login: $loginResponse")
-
+                Log.d("LoginWorker", "Respuesta login: $loginResponse")
+                
                 if (loginResponse.contains("true")) {
-                    // 2. Si el login es exitoso, descargar TODO lo demás de una vez
+                    Log.d("LoginWorker", "Login exitoso, descargando datos...")
                     val perfil = container.snRepository.profile(matricula, password)
                     val kardex = container.snRepository.getKardex("1")
                     val carga = container.snRepository.getCargaAcademica()
                     val parciales = container.snRepository.getCalificacionesUnidades()
                     val finales = container.snRepository.getCalificacionesFinales(1)
 
-                    val gson = Gson()
+                    val json = Json { ignoreUnknownKeys = true }
                     return Result.success(workDataOf(
-                        "KEY_PERFIL_JSON" to gson.toJson(perfil),
-                        "KEY_KARDEX_JSON" to gson.toJson(kardex),
-                        "KEY_CARGA_JSON" to gson.toJson(carga),
-                        "KEY_PARCIALES_JSON" to gson.toJson(parciales),
-                        "KEY_FINALES_JSON" to gson.toJson(finales)
+                        "KEY_PERFIL_JSON" to json.encodeToString(perfil),
+                        "KEY_KARDEX_JSON" to json.encodeToString(kardex),
+                        "KEY_CARGA_JSON" to json.encodeToString(carga),
+                        "KEY_PARCIALES_JSON" to json.encodeToString(parciales),
+                        "KEY_FINALES_JSON" to json.encodeToString(finales)
                     ))
+                } else if (loginResponse.contains("false") || loginResponse.contains("No existe el usuario")) {
+                    Log.w("LoginWorker", "Credenciales incorrectas: $loginResponse")
+                    return Result.failure(workDataOf("error" to "Credenciales incorrectas. Verifica tu número de control y contraseña."))
                 } else {
-                    return Result.failure(workDataOf("error" to "Credenciales incorrectas"))
+                    Log.w("LoginWorker", "Respuesta inesperada del servidor: $loginResponse")
+                    return Result.failure(workDataOf("error" to "Servidor del Tec: Respuesta no reconocida."))
                 }
-
             } catch (e: Exception) {
+                Log.e("LoginWorker", "Error en intento $currentAttempt", e)
                 currentAttempt++
-                Log.e("SICENET_DEBUG", "Error de red (Intento $currentAttempt): ${e.message}")
                 if (currentAttempt < maxAttempts) {
-                    delay(2000) // Esperar 2 segundos antes de reintentar
+                    delay(2000)
+                } else {
+                    return Result.failure(workDataOf("error" to "Error de red: ${e.message ?: "Sin conexión con el servidor"}"))
                 }
             }
         }
-
-        return Result.failure(workDataOf("error" to "No se pudo conectar con el servidor tras $maxAttempts intentos"))
+        return Result.failure(workDataOf("error" to "Error desconocido tras varios intentos"))
     }
 }

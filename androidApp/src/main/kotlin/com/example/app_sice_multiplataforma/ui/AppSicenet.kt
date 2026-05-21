@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,38 +21,40 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import androidx.work.WorkInfo
-import com.example.app_sice_multiplataforma.ui.screens.CalificaionesScreen
-import com.example.app_sice_multiplataforma.ui.screens.CargaAcademicaScreen
-import com.example.app_sice_multiplataforma.ui.screens.FinalesScreen
-import com.example.app_sice_multiplataforma.ui.screens.HomeScreen
-import com.example.app_sice_multiplataforma.ui.screens.KardexScreen
-import com.example.app_sice_multiplataforma.ui.screens.ProfileScreen
-import com.example.app_sice_multiplataforma.ui.screens.SNUiState
-import com.example.app_sice_multiplataforma.ui.screens.SNViewModel
+import com.example.app_sice_multiplataforma.ui.screens.*
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSicenet() {
-    val snViewModel: SNViewModel = viewModel(factory = SNViewModel.Factory)
+    val snViewModel: AndroidSNViewModel = viewModel(factory = AndroidSNViewModel.Factory)
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val uiState = snViewModel.snUiState
+    val uiState = snViewModel.uiStateFlow.collectAsState().value
     val workInfo by snViewModel.workInfo.collectAsState()
     val context = LocalContext.current
+    val isSuccess = uiState is SNUiState.Success
 
     // Sincronización: Cuando el login tiene éxito, cargamos la base de datos local
     LaunchedEffect(workInfo?.id, workInfo?.state) {
-        if (workInfo?.state == WorkInfo.State.SUCCEEDED) {
-            snViewModel.cargarDatosDesdeLocal()
+        when (workInfo?.state) {
+            WorkInfo.State.SUCCEEDED -> {
+                snViewModel.cargarDatosDesdeLocal()
+            }
+            WorkInfo.State.FAILED -> {
+                val errorMsg = workInfo?.outputData?.getString("error") ?: "Error desconocido"
+                snViewModel.snUiState = SNUiState.Error(errorMsg)
+            }
+            else -> Unit
         }
     }
 
-    if (uiState is SNUiState.Success) {
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = isSuccess,
+        drawerContent = {
+            if (uiState is SNUiState.Success) {
                 // Diseño moderno del Drawer con bordes redondeados
                 ModalDrawerSheet(
                     drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
@@ -193,7 +196,7 @@ fun AppSicenet() {
                         }
                     )
 
-                    Divider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp), thickness = 0.5.dp, color = Color(0xFFF3E5F5))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp), thickness = 0.5.dp, color = Color(0xFFF3E5F5))
 
                     // --- SECCIÓN CALIFICACIONES ---
                     Text(
@@ -230,7 +233,7 @@ fun AppSicenet() {
                     NavigationDrawerItem(
                         label = { Text("Cerrar Sesión", fontWeight = FontWeight.Bold) },
                         selected = false,
-                        icon = { Icon(Icons.Default.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                         colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
                         onClick = {
@@ -241,62 +244,59 @@ fun AppSicenet() {
                     )
                 }
             }
-        ) {
-            Scaffold(
-                topBar = {
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                if (isSuccess) {
                     CenterAlignedTopAppBar(
                         title = { Text("SICENET", fontWeight = FontWeight.Black, color = Color(0xFF4A2C5D)) },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Default.MenuOpen, contentDescription = "Menú", tint = Color(0xFF4A2C5D))
+                                Icon(Icons.AutoMirrored.Filled.MenuOpen, contentDescription = "Menú", tint = Color(0xFF4A2C5D))
                             }
                         }
                     )
                 }
-            ) { padding ->
-                // --- AQUÍ ESTÁ EL TRUCO GLOBAL PARA MOSTRARLO EN TODAS LAS PANTALLAS ---
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                ) {
-                    // ETIQUETA VISIBLE EN TODAS LAS PANTALLAS (REQUERIMIENTO 2.b)
-                    if (uiState.esOffline && uiState.ultimaSincro.isNotBlank()) {
-                        Surface(
-                            color = Color(0xFFFFF3E0), // Naranja suave para que resalte
-                            modifier = Modifier.fillMaxWidth()
+            }
+        ) { padding ->
+            // --- AQUÍ ESTÁ EL TRUCO GLOBAL PARA MOSTRARLO EN TODAS LAS PANTALLAS ---
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                // ETIQUETA VISIBLE EN TODAS LAS PANTALLAS (REQUERIMIENTO 2.b)
+                if (uiState is SNUiState.Success && uiState.esOffline && uiState.ultimaSincro.isNotBlank()) {
+                    Surface(
+                        color = Color(0xFFFFF3E0), // Naranja suave para que resalte
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudOff,
-                                    contentDescription = null,
-                                    tint = Color(0xFFE65100),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Sin internet. Datos guardados el: ${uiState.ultimaSincro}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFE65100),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.CloudOff,
+                                contentDescription = null,
+                                tint = Color(0xFFE65100),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Sin internet. Datos guardados el: ${uiState.ultimaSincro}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFE65100),
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
-
-                    // El contenido de la pantalla (Kardex, Parciales, etc.)
-                    ContenidoNavegacion(navController, snViewModel, uiState, Modifier.weight(1f))
                 }
+
+                // El contenido de la pantalla (Kardex, Parciales, etc.)
+                ContenidoNavegacion(navController, snViewModel, uiState, Modifier.weight(1f))
             }
-        }
-    } else {
-        // Vista para Login o Pantalla de Carga
-        Scaffold { padding ->
-            ContenidoNavegacion(navController, snViewModel, uiState, Modifier.padding(padding))
         }
     }
 }
@@ -319,7 +319,7 @@ fun DrawerMenuItem(label: String, icon: ImageVector, onClick: () -> Unit) {
 @Composable
 fun ContenidoNavegacion(
     navController: NavHostController,
-    snViewModel: SNViewModel,
+    snViewModel: AndroidSNViewModel,
     uiState: SNUiState,
     modifier: Modifier
 ) {
@@ -327,9 +327,7 @@ fun ContenidoNavegacion(
         composable("login") {
             HomeScreen(
                 snUiState = uiState,
-                onLoginClick = { m, p, t -> snViewModel.loginYConsultarPerfil(m, p, t) },
-                onKardexClick = {},
-                onLogoutClick = {}
+                onLoginClick = { m, p, t -> snViewModel.loginYConsultarPerfil(m, p, t) }
             )
             // Navegación automática cuando uiState pasa a Success
             LaunchedEffect(uiState) {
@@ -343,7 +341,9 @@ fun ContenidoNavegacion(
         composable("profile") { if (uiState is SNUiState.Success) ProfileScreen(uiState.data) }
         composable("carga") { if (uiState is SNUiState.Success) CargaAcademicaScreen(uiState.cargaAcademica) }
         composable("kardex") { if (uiState is SNUiState.Success) KardexScreen(uiState.kardex) }
-        composable("parciales") { if (uiState is SNUiState.Success) CalificaionesScreen(uiState.califUnidades) }
+        composable("parciales") { if (uiState is SNUiState.Success) CalificacionesScreen(uiState.califUnidades) }
         composable("finales") { if (uiState is SNUiState.Success) FinalesScreen(uiState.califFinales) }
     }
 }
+
+//5q$S_B

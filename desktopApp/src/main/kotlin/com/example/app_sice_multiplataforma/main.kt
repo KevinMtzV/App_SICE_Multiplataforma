@@ -8,7 +8,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.example.app_sice_multiplataforma.ui.AppSicenet
-import com.example.app_sice_multiplataforma.ui.screens.SNViewModel
+import com.example.app_sice_multiplataforma.ui.screens.DesktopSNViewModel
 
 fun main() = application {
     val windowState = rememberWindowState(width = 1100.dp, height = 750.dp)
@@ -18,7 +18,7 @@ fun main() = application {
         title = "SICENET - TecNM",
         state = windowState
     ) {
-        val viewModel = remember { SNViewModel() }
+        val viewModel = remember { DesktopSNViewModel() }
 
         DisposableEffect(Unit) {
             onDispose { viewModel.onDispose() }

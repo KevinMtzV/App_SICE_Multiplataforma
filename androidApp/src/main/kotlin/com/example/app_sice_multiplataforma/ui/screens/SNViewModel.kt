@@ -6,9 +6,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.preference.PreferenceManager
 import android.util.Log
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -17,47 +14,33 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.work.WorkInfo
 import com.example.app_sice_multiplataforma.MarsPhotosApplication
-import com.example.app_sice_multiplataforma.data.SNRepository
 import com.example.app_sice_multiplataforma.data.SNWMRepository
-import com.example.app_sice_multiplataforma.model.CalificacionFinal
-import com.example.app_sice_multiplataforma.model.CalificacionParcial
-import com.example.app_sice_multiplataforma.model.KardexItem
-import com.example.app_sice_multiplataforma.model.MateriaCarga
-import com.example.app_sice_multiplataforma.model.ProfileStudent
+import com.example.app_sice_multiplataforma.data.repository.SNRepository
+import com.example.app_sice_multiplataforma.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
-sealed interface SNUiState {
-    data class Success(
-        val data: ProfileStudent,
-        val kardex: List<KardexItem> = emptyList(),
-        val califUnidades: List<CalificacionParcial> = emptyList(),
-        val califFinales: List<CalificacionFinal> = emptyList(),
-        val cargaAcademica: List<MateriaCarga> = emptyList(),
-        val esOffline: Boolean = false,
-        val ultimaSincro: String = ""
-    ) : SNUiState
-    object Error : SNUiState
-    object Loading : SNUiState
-    object Idle : SNUiState
-}
-
-class SNViewModel(
+class AndroidSNViewModel(
     application: Application,
     private val snRepository: SNRepository,
-    private val dbRepository: SNRepository,
     private val snWMRepository: SNWMRepository
 ) : AndroidViewModel(application) {
 
-    var snUiState: SNUiState by mutableStateOf(SNUiState.Idle)
-        private set
+    private val _snUiState = MutableStateFlow<SNUiState>(SNUiState.Idle)
+    val uiStateFlow = _snUiState.asStateFlow()
+
+    var snUiState: SNUiState 
+        get() = _snUiState.value
+        set(value) { _snUiState.value = value }
 
     val workInfo: StateFlow<WorkInfo?> = snWMRepository.outputWorkInfo
         .stateIn(
@@ -65,6 +48,24 @@ class SNViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
+
+    init {
+        // Monitorear WorkManager internamente para actualizar snUiState
+        viewModelScope.launch {
+            workInfo.collect { info ->
+                when (info?.state) {
+                    WorkInfo.State.FAILED -> {
+                        val error = info.outputData.getString("error") ?: "Error de conexión"
+                        snUiState = SNUiState.Error(error)
+                    }
+                    WorkInfo.State.SUCCEEDED -> {
+                        cargarDatosDesdeLocal()
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
 
     private fun getFechaActual(): String {
         val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
@@ -97,33 +98,29 @@ class SNViewModel(
                 var intentos = 0
                 while (perfilLocal == null && intentos < 5) {
                     delay(1000)
-                    perfilLocal = dbRepository.getPerfil()
+                    perfilLocal = snRepository.getLocalPerfil()
                     intentos++
                 }
 
                 if (perfilLocal != null) {
-                    val kardex = dbRepository.getKardex()
-                    val carga = dbRepository.getCargaAcademica()
-                    val parciales = dbRepository.getCalificacionesUnidades()
-                    val finales = dbRepository.getCalificacionesFinales(1)
-
                     snUiState = SNUiState.Success(
                         data = perfilLocal,
-                        kardex = kardex,
-                        cargaAcademica = carga,
-                        califUnidades = parciales,
-                        califFinales = finales,
+                        kardex = snRepository.getLocalKardex(),
+                        cargaAcademica = snRepository.getLocalCarga(),
+                        califUnidades = snRepository.getLocalParciales(),
+                        califFinales = snRepository.getLocalFinales(),
                         esOffline = true,
                         ultimaSincro = "Carga Inicial Local"
                     )
                 } else {
-                    snUiState = SNUiState.Error
+                    snUiState = SNUiState.Error("Error: No se encontró el perfil del estudiante en la base de datos local.")
                 }
             } catch (e: Exception) {
-                snUiState = SNUiState.Error
+                snUiState = SNUiState.Error("Error al cargar datos locales: ${e.message}")
             }
         }
     }
+
     fun consultarKardex() {
         val currentState = snUiState
         if (currentState is SNUiState.Success) {
@@ -131,14 +128,13 @@ class SNViewModel(
                 if (hayInternet(getApplication())) {
                     try {
                         val lista = withContext(Dispatchers.IO) { snRepository.getKardex() }
-                        dbRepository.insertKardex(lista)
+                        snRepository.saveKardex(lista)
                         snUiState = currentState.copy(kardex = lista, esOffline = false)
                     } catch (e: Exception) {
                         Log.e("SICENET_DEBUG", "Error Kardex API: ${e.message}")
                     }
                 } else {
-                    // Modo Offline: Leer de Room
-                    val listaLocal = withContext(Dispatchers.IO) { dbRepository.getKardex() }
+                    val listaLocal = withContext(Dispatchers.IO) { snRepository.getLocalKardex() }
                     snUiState = currentState.copy(kardex = listaLocal, esOffline = true, ultimaSincro = getFechaActual())
                 }
             }
@@ -152,13 +148,13 @@ class SNViewModel(
                 if (hayInternet(getApplication())) {
                     try {
                         val lista = withContext(Dispatchers.IO) { snRepository.getCargaAcademica() }
-                        dbRepository.insertCarga(lista)
+                        snRepository.saveCarga(lista)
                         snUiState = currentState.copy(cargaAcademica = lista, esOffline = false)
                     } catch (e: Exception) {
                         Log.e("SICENET_DEBUG", "Error Carga API: ${e.message}")
                     }
                 } else {
-                    val listaLocal = withContext(Dispatchers.IO) { dbRepository.getCargaAcademica() }
+                    val listaLocal = withContext(Dispatchers.IO) { snRepository.getLocalCarga() }
                     snUiState = currentState.copy(cargaAcademica = listaLocal, esOffline = true, ultimaSincro = getFechaActual())
                 }
             }
@@ -172,13 +168,13 @@ class SNViewModel(
                 if (hayInternet(getApplication())) {
                     try {
                         val lista = withContext(Dispatchers.IO) { snRepository.getCalificacionesUnidades() }
-                        dbRepository.insertParciales(lista)
+                        snRepository.saveParciales(lista)
                         snUiState = currentState.copy(califUnidades = lista, esOffline = false)
                     } catch (e: Exception) {
                         Log.e("SICENET_DEBUG", "Error Unidades API: ${e.message}")
                     }
                 } else {
-                    val listaLocal = withContext(Dispatchers.IO) { dbRepository.getCalificacionesUnidades() }
+                    val listaLocal = withContext(Dispatchers.IO) { snRepository.getLocalParciales() }
                     snUiState = currentState.copy(califUnidades = listaLocal, esOffline = true, ultimaSincro = getFechaActual())
                 }
             }
@@ -192,17 +188,13 @@ class SNViewModel(
                 if (hayInternet(getApplication())) {
                     try {
                         val lista = withContext(Dispatchers.IO) { snRepository.getCalificacionesFinales(1) }
-
-                        if (lista.isNotEmpty()) {
-                            withContext(Dispatchers.IO) { dbRepository.insertFinales(lista) }
-                        }
-
+                        snRepository.saveFinales(lista)
                         snUiState = currentState.copy(califFinales = lista, esOffline = false)
                     } catch (e: Exception) {
                         Log.e("SICENET_DEBUG", "Error Finales API: ${e.message}")
                     }
                 } else {
-                    val listaLocal = withContext(Dispatchers.IO) { dbRepository.getCalificacionesFinales(1) }
+                    val listaLocal = withContext(Dispatchers.IO) { snRepository.getLocalFinales() }
                     snUiState = currentState.copy(califFinales = listaLocal, esOffline = true, ultimaSincro = getFechaActual())
                 }
             }
@@ -213,10 +205,9 @@ class SNViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val application = (this[APPLICATION_KEY] as MarsPhotosApplication)
-                SNViewModel(
+                AndroidSNViewModel(
                     application = application,
                     snRepository = application.container.snRepository,
-                    dbRepository = application.container.dbLocalRepository,
                     snWMRepository = application.snwmRepository
                 )
             }

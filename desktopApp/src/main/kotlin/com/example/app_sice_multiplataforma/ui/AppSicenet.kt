@@ -37,7 +37,7 @@ enum class Screen(val label: String, val icon: ImageVector, val group: String) {
 }
 
 @Composable
-fun AppSicenet(viewModel: SNViewModel) {
+fun AppSicenet(viewModel: DesktopSNViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     var current by remember { mutableStateOf(Screen.Profile) }
 
@@ -74,7 +74,7 @@ fun AppSicenet(viewModel: SNViewModel) {
 private fun MainLayout(
     state: SNUiState.Success,
     current: Screen,
-    viewModel: SNViewModel,
+    viewModel: DesktopSNViewModel,
     onNav: (Screen) -> Unit,
     onLogout: () -> Unit
 ) {
