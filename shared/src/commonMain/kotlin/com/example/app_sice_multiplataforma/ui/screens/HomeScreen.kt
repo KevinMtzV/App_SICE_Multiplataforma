@@ -44,8 +44,10 @@ fun HomeScreen(
                 // No mostrar nada mientras se navega al perfil
             }
             else -> {
+                val errorState = snUiState as? SNUiState.Error
                 LoginContent(
-                    errorMsg = (snUiState as? SNUiState.Error)?.mensaje,
+                    errorMsg = errorState?.mensaje,
+                    isRedBlockeada = errorState?.esRedBlockeada ?: false,
                     onLoginClick = onLoginClick
                 )
             }
@@ -56,6 +58,7 @@ fun HomeScreen(
 @Composable
 private fun LoginContent(
     errorMsg: String?,
+    isRedBlockeada: Boolean,
     onLoginClick: (String, String, String) -> Unit
 ) {
     var matricula by remember { mutableStateOf("") }
@@ -134,12 +137,32 @@ private fun LoginContent(
 
             if (isError) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = errorMsg ?: "Acceso denegado. Revisa tus datos.",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium
-                )
+                if (isRedBlockeada) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                "Red bloqueada por SICENET",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                "El servidor solo acepta la red del campus o hotspot del celular.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = errorMsg ?: "Acceso denegado. Revisa tus datos.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }

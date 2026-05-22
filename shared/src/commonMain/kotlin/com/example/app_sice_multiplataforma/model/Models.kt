@@ -69,13 +69,3 @@ data class CalificacionFinal(
     @SerialName("Calificacion") val calificacion: String = "",
     @SerialName("Acreditacion") val acreditacion: String = ""
 )
-
-@Serializable
-data class CacheData(
-    val perfil: ProfileStudent? = null,
-    val kardex: List<KardexItem> = emptyList(),
-    val carga: List<MateriaCarga> = emptyList(),
-    val parciales: List<CalificacionParcial> = emptyList(),
-    val finales: List<CalificacionFinal> = emptyList(),
-    val ultimaSincro: String = ""
-)
