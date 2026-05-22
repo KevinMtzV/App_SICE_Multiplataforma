@@ -31,24 +31,13 @@ fun AppSicenet() {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val uiState = snViewModel.uiStateFlow.collectAsState().value
-    val workInfo by snViewModel.workInfo.collectAsState()
+    val uiState = snViewModel.uiState.collectAsState().value
     val context = LocalContext.current
     val isSuccess = uiState is SNUiState.Success
 
-    // Sincronización: Cuando el login tiene éxito, cargamos la base de datos local
-    LaunchedEffect(workInfo?.id, workInfo?.state) {
-        when (workInfo?.state) {
-            WorkInfo.State.SUCCEEDED -> {
-                snViewModel.cargarDatosDesdeLocal()
-            }
-            WorkInfo.State.FAILED -> {
-                val errorMsg = workInfo?.outputData?.getString("error") ?: "Error desconocido"
-                snViewModel.snUiState = SNUiState.Error(errorMsg)
-            }
-            else -> Unit
-        }
-    }
+    // Ya no necesitamos el LaunchedEffect de WorkManager porque la lógica
+    // está centralizada en el SharedSNViewModel y actualiza uiState directamente.
+
 
     ModalNavigationDrawer(
         drawerState = drawerState,

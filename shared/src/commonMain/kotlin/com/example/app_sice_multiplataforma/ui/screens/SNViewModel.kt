@@ -31,4 +31,5 @@ interface ISNViewModel {
     fun consultarCalificacionesUnidades()
     fun consultarCalificacionesFinales()
     fun logout()
+    fun onDispose()
 }

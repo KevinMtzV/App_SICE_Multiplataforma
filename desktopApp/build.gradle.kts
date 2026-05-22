@@ -23,6 +23,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 dependencies {
+    implementation(libs.androidx.lifecycle.viewmodel)
+    implementation(libs.androidx.lifecycle.viewmodelCompose)
+    implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(projects.shared)
     implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
     implementation(compose.desktop.currentOs)
